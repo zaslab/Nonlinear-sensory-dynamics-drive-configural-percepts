@@ -108,4 +108,5 @@ scatter(mse(1,2),0.01, 50,'r','*')
 
 
 ylabel('Frequency')
+
 xlabel('RMSE')

@@ -1,0 +1,103 @@
+function [activations_by_worm, activations_by_worm_identity,all_features_concatenated]...
+    = MakeSynthWorms(all_ids, all_data, all_trace_features,...
+    num_to_sample,features_to_use,varargin)
+completion_method = 'rand_sample';
+for i=1:1:length(varargin)
+    if strcmp(varargin{i},'completion_method')
+        completion_method = varargin{i+1};
+    end
+
+end
+feat_flag = (nargout > 2 & ~isempty(all_trace_features));
+[unique_ids] = unique(all_ids, 'rows', 'first');
+
+total_size = num_to_sample * max(all_ids(:,2));
+
+feat_num = length(features_to_use);
+neuron_num = length(unique(all_ids(:,1)));
+total_feat_num = features_to_use(end) * neuron_num*2;
+on_features_concatenated = zeros(total_size, total_feat_num);
+off_features_concatenated = zeros(total_size, total_feat_num);
+activations_by_worm = zeros(total_size, neuron_num*2);
+activations_by_worm_identity = zeros(total_size, 1);
+
+% Rearrange neurons to be like neuron_pairs
+% relevant_neurons = [6, 16, 1, 2,7, 8, 3, 5, 10,14,4,9,21];
+if length(unique(unique_ids(:,1))) < 22
+    relevant_neurons = unique(unique_ids(:,1));
+end
+
+
+for neuron = 1:length(relevant_neurons)
+    rows = 0;
+    neuron_id = relevant_neurons(neuron);
+    feat_cols = ((neuron - 1) * feat_num  + 1):(neuron*feat_num );
+    for cond = 1:max(unique_ids(:,2))
+        start = rows(end)+1;
+        % num_to_sample = length(all_ids(all_ids(:,2) == cond))/44;
+        % rows = (start:(start+num_to_sample-1));
+        
+        rows = ((cond - 1) * num_to_sample + 1): cond*num_to_sample;
+        for step = 1:2
+            %
+            point_to_plot= find(all_ids(:,1) == neuron_id & ...
+                all_ids(:,2) == cond & ...
+                all_ids(:,3) == step);
+            if isempty(point_to_plot)
+                continue
+            end
+            sample_neurons = randsample(length(point_to_plot),num_to_sample, true);
+            neur_acts = all_data(point_to_plot);
+            neur_acts(isnan(neur_acts)) = [];
+            % sample_neurons = randsample(length(neur_acts),num_to_sample, true);
+            % activities = neur_acts(sample_neurons);
+            activities = all_data(point_to_plot(sample_neurons));
+            
+            if feat_flag 
+                if step == 1
+                    on_features_concatenated(rows,feat_cols)...
+                        = all_trace_features(point_to_plot(sample_neurons),features_to_use);
+                else
+                    off_features_concatenated(rows,feat_cols)...
+                        = all_trace_features(point_to_plot(sample_neurons),features_to_use);
+
+                end
+            end
+            tries_counter = 1;
+            while sum(isnan(activities)> 0) && tries_counter < 200
+                nan_num = find(isnan(activities));
+                new_samp = randsample(length(point_to_plot),length(nan_num), true);
+                activities(nan_num) = all_data(point_to_plot(new_samp));
+                if feat_flag 
+                    if step == 1
+                        on_features_concatenated(nan_num + rows(1) - 1,feat_cols) = ...
+                            all_trace_features(point_to_plot(new_samp),features_to_use);
+
+                    else
+                        off_features_concatenated(nan_num + rows(1) - 1,feat_cols) = ...
+                            all_trace_features(point_to_plot(new_samp),features_to_use);
+
+                    end
+                end
+                tries_counter = tries_counter + 1;
+            end
+            activities(isnan(activities)) = 0;
+            if feat_flag 
+                off_features_concatenated(isnan(off_features_concatenated)) = 0;
+                on_features_concatenated(isnan(on_features_concatenated)) = 0;
+            end
+            activations_by_worm(rows, neuron + (step - 1) * neuron_num) = activities;
+
+            activations_by_worm_identity(rows, 1) = repmat( cond, num_to_sample,1);
+
+        end
+       
+    end
+end
+if feat_flag 
+    all_features_concatenated = cat(2, on_features_concatenated, off_features_concatenated);
+else
+    all_features_concatenated = [];
+end
+
+end
